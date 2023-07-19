@@ -21,12 +21,13 @@
 char args_doc[] = "DeviceID DeviceSecret ProductID";
 
 struct argp_option options[] = {
-    	{"prodID", 'p', "STRING", 0, "DeviceID"},
-    	{"devId", 'd', "STRING", 0, "DeviceSecret"},
-    	{"devSec", 's', "STRING", 0, "ProductID"},
-    	{"daemon", 'D', 0, 0, "Daemonize the process"},
+    	{"prodID", 'p', "STRING", 0, "DeviceID", 0},
+    	{"devId", 'd', "STRING", 0, "DeviceSecret", 0},
+    	{"devSec", 's', "STRING", 0, "ProductID", 0},
+    	{"daemon", 'D', 0, 0, "Daemonize the process", 0},
     	{0}
 };
+
 
 struct arguments {
     	char prodId[50];
@@ -66,7 +67,7 @@ error_t parse_opt(int key, char *arg, struct argp_state *state) {
     	return 0;
 }
 
-struct argp argp = {options, parse_opt, args_doc};
+struct argp argp = {options, parse_opt, args_doc, NULL};
 
 void daemonize() {
     	pid_t pid, sid;
@@ -94,6 +95,14 @@ void daemonize() {
     	close(STDERR_FILENO);
 }
 
+
+volatile sig_atomic_t g_signal_flag = 1;
+void sig_handler()
+{
+	g_signal_flag = 0;
+}
+
+
 //************* Tuya SDK *****************//
 char productId[50];      // = "gu4dt5nzdjwjbyon";
 char deviceId[50];       // = "26f4410c90739d522evbjp";
@@ -101,8 +110,9 @@ char deviceSecret[50];   // = "CtYs2K3cule42h5s";
 struct arguments arguments;
 tuya_mqtt_context_t client_instance;
 tuya_mqtt_context_t* client;
+int ret = OPRT_OK;
 
-void on_connected(tuya_mqtt_context_t* context, void* user_data)
+void on_connected(tuya_mqtt_context_t* context)
 {
     	TY_LOGI("on connected");
     	syslog(LOG_INFO, "Connected to Tuya.");
@@ -114,7 +124,7 @@ void on_connected(tuya_mqtt_context_t* context, void* user_data)
     	tuyalink_thing_property_report_with_ack(context, deviceId, "{\"greeting\":{\"value\":'Hello world!!---',\"time\":1631708204231}}");  
 }
 
-void on_disconnect(tuya_mqtt_context_t* context, void* user_data)
+void on_disconnect(tuya_mqtt_context_t* context)
 {
     	TY_LOGI("on disconnect");
     	syslog(LOG_INFO, "Disconnected from Tuya.");
@@ -142,26 +152,26 @@ void termination_handler(int signum) {
     	syslog(LOG_INFO, "Program terminated by signal %d.", signum);
     	closelog();
     	tuya_mqtt_disconnect(client);
-	    	
+	ret = 0;
     	exit(EXIT_SUCCESS);
 }
-
+/*
 void sig_handler(int signum) {
     	syslog(LOG_INFO, "Program terminated by user in the console.");
     	closelog();
     	tuya_mqtt_disconnect(client);
     	
     	exit(EXIT_SUCCESS);
-}
+}*/
 
-int main(int argc, char** argv) {	
+int main(int argc, char** argv) {
 	setlogmask(LOG_UPTO (LOG_INFO));
 
 	openlog("First daemon program", LOG_CONS | LOG_PID | LOG_NDELAY, LOG_LOCAL1);
 	
 	syslog(LOG_INFO, "Program started by User %s", "studentas");
 	
-	signal(SIGTERM, termination_handler);
+	signal(SIGTERM, sig_handler);
 	signal(SIGINT, sig_handler);
 	signal(SIGQUIT, sig_handler);
 	
@@ -194,7 +204,7 @@ int main(int argc, char** argv) {
 	strncpy(deviceId, arguments.devId, 50);
 	strncpy(deviceSecret, arguments.devSec, 50);
 
-    	int ret = OPRT_OK;
+    	//int ret = OPRT_OK;
 
     	//tuya_mqtt_context_t* client = &client_instance;
 	client = &client_instance;
@@ -218,15 +228,17 @@ int main(int argc, char** argv) {
         	syslog(LOG_ERR, "ERROR: Failed to connect to Tuya service. Error code: %d", ret);
         	tuya_mqtt_disconnect(client);
         	closelog();
-
-        	exit(EXIT_FAILURE);
+		ret = tuya_mqtt_deinit(client);
+        	return ret;
     	}
 
-    	for (;;) {
+    	while (g_signal_flag) {s
         	tuya_mqtt_loop(client);
     	}
+    	
     	tuya_mqtt_disconnect(client);
 	closelog ();
-	
+	ret = tuya_mqtt_deinit(client);
+
     	return ret;
 }
