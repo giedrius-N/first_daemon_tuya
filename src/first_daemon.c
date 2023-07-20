@@ -112,7 +112,7 @@ tuya_mqtt_context_t client_instance;
 tuya_mqtt_context_t* client;
 int ret = OPRT_OK;
 
-void on_connected(tuya_mqtt_context_t* context)
+void on_connected(tuya_mqtt_context_t* context, void* user_data)
 {
     	TY_LOGI("on connected");
     	syslog(LOG_INFO, "Connected to Tuya.");
@@ -121,10 +121,10 @@ void on_connected(tuya_mqtt_context_t* context)
     	tuyalink_thing_property_report_with_ack(context, deviceId, "{\"daemon_test\":{\"value\":true,\"time\":1631708204231}}");	
 
 	syslog(LOG_INFO, "Sending property report with ACK: {\"greeting\":{\"value\":'Hello world!!---','time':1631708204231}}");
-    	tuyalink_thing_property_report_with_ack(context, deviceId, "{\"greeting\":{\"value\":'Hello world!!---',\"time\":1631708204231}}");  
+    	tuyalink_thing_property_report_with_ack(context, deviceId, "{\"greeting\":{\"value\":'Hello world!!---',\"time\":1631708204231}}");
 }
 
-void on_disconnect(tuya_mqtt_context_t* context)
+void on_disconnect(tuya_mqtt_context_t* context, void* user_data)
 {
     	TY_LOGI("on disconnect");
     	syslog(LOG_INFO, "Disconnected from Tuya.");
@@ -135,15 +135,52 @@ void on_messages(tuya_mqtt_context_t* context, void* user_data, const tuyalink_m
     	TY_LOGI("on message id:%s, type:%d, code:%d", msg->msgid, msg->type, msg->code);
     	switch (msg->type) {
         	case THING_TYPE_DEVICE_SUB_BIND_RSP:
-            	TY_LOGI("bind response:%s\r\n", msg->data_string);
-            	break;
+            		TY_LOGI("bind response:%s\r\n", msg->data_string);
+            		break;
 
         	case THING_TYPE_DEVICE_TOPO_GET_RSP:
-            	TY_LOGI("get topo response:%s\r\n", msg->data_string);
-            	break;
+            		TY_LOGI("get topo response:%s\r\n", msg->data_string);
+            		break;
+            	
+            	case THING_TYPE_PROPERTY_SET:
+            		TY_LOGI("property set:%s", msg->data_string);
 
+		case THING_TYPE_ACTION_EXECUTE:
+			TY_LOGI("Action executed: %s", msg->data_string);
+			cJSON *root = cJSON_Parse(msg->data_string);
+			if (root == NULL) {
+				syslog(LOG_ERR, "JSON parse was not successful");
+			} else {
+				syslog(LOG_INFO, "JSON parse was successful");
+				cJSON* input_params = cJSON_GetObjectItem(root, "inputParams");
+				if (input_params != NULL) {
+					cJSON *greeting_value = cJSON_GetObjectItem(input_params, "greeting_identifier");
+					if (greeting_value != NULL) {
+						char set_greeting[300];
+						sprintf(set_greeting, "{\"greeting\":{\"value\":\"%s\",\"time\":1631708204231}}", greeting_value->valuestring);
+						tuyalink_thing_property_report_with_ack(context, deviceId, set_greeting);
+					} else {
+						syslog(LOG_ERR, "Failed to get greeting value from inputParams");
+					}
+					cJSON *test_value = cJSON_GetObjectItem(input_params, "test_bool_i");
+					if (test_value != NULL) {
+						bool test_bool = cJSON_IsTrue(test_value);
+						if (test_bool) {
+							tuyalink_thing_property_report_with_ack(context, deviceId, "{\"daemon_test\":{\"value\":true,\"time\":1631708204231}}");
+						} else {
+							tuyalink_thing_property_report_with_ack(context, deviceId, "{\"daemon_test\":{\"value\":false,\"time\":1631708204231}}");
+						}
+					} else {
+						syslog(LOG_ERR, "Failed to get test bool value from inputParams");
+					}
+				} else {
+					syslog(LOG_ERR, "Failed to get 'inputParams from JSON");
+				}
+			}
+			break;	
+		
         	default:
-            	break;
+            		break;
     	}
     	printf("\r\n");
 }
@@ -155,14 +192,6 @@ void termination_handler(int signum) {
 	ret = 0;
     	exit(EXIT_SUCCESS);
 }
-/*
-void sig_handler(int signum) {
-    	syslog(LOG_INFO, "Program terminated by user in the console.");
-    	closelog();
-    	tuya_mqtt_disconnect(client);
-    	
-    	exit(EXIT_SUCCESS);
-}*/
 
 int main(int argc, char** argv) {
 	setlogmask(LOG_UPTO (LOG_INFO));
@@ -204,9 +233,6 @@ int main(int argc, char** argv) {
 	strncpy(deviceId, arguments.devId, 50);
 	strncpy(deviceSecret, arguments.devSec, 50);
 
-    	//int ret = OPRT_OK;
-
-    	//tuya_mqtt_context_t* client = &client_instance;
 	client = &client_instance;
 	
     	ret = tuya_mqtt_init(client, &(const tuya_mqtt_config_t) {
@@ -232,7 +258,7 @@ int main(int argc, char** argv) {
         	return ret;
     	}
 
-    	while (g_signal_flag) {s
+    	while (g_signal_flag) {
         	tuya_mqtt_loop(client);
     	}
     	
