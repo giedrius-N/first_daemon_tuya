@@ -1,7 +1,7 @@
 LIB_DIR := ../lib
 LIB := $(wildcard $(LIB_DIR)/*.so)
 LDFLAGS := -L$(LIB_DIR) $(addprefix -l,$(notdir $(basename $(LIB))))
-IFLAGS = -I/home/studentas/Desktop/tuyaSDK/tuya-iot-core-sdk/utils -I/home/studentas/Desktop/tuyaSDK/tuya-iot-core-sdk/interface -I/home/studentas/Desktop/tuyaSDK/tuya-iot-core-sdk/include
+IFLAGS = -I/home/studentas/Desktop/tuyaSDK/tuya-iot-core-sdk/utils -I/home/studentas/Desktop/tuyaSDK/tuya-iot-core-sdk/interface -I/home/studentas/Desktop/tuyaSDK/tuya-iot-core-sdk/include -I../include
 LDLIBS = -llink_core -lmiddleware_implementation -lplatform_port -lutils_modules
 
 
@@ -12,7 +12,7 @@ CFLAGS := -Wall -Wextra
 
 all: myprogram
 
-myprogram: first_daemon.o
+myprogram: main.o
 	$(CC) -L../lib $^ -o $@ $(LDLIBS)
 
 %.o: %.c
