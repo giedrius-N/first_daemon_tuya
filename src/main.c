@@ -7,6 +7,7 @@
 #include <assert.h>
 #include <argp.h>
 #include <signal.h>
+#include <sys/sysinfo.h>
 
 #include "cJSON.h"
 #include "tuya_cacert.h"
@@ -87,7 +88,7 @@ void on_messages(tuya_mqtt_context_t* context, void* user_data, const tuyalink_m
 				syslog(LOG_ERR, "JSON parse was not successful");
 			} else {
 				syslog(LOG_INFO, "JSON parse was successful");
-				transfer_data(context, msg, root);
+				transfer_data_from_cloud(context, msg, root);
 			}
 			break;	
 		
@@ -97,7 +98,7 @@ void on_messages(tuya_mqtt_context_t* context, void* user_data, const tuyalink_m
     	printf("\r\n");
 }
 
-void transfer_data(tuya_mqtt_context_t* context, const tuyalink_message_t* msg, cJSON *root) {
+void transfer_data_from_cloud(tuya_mqtt_context_t* context, const tuyalink_message_t* msg, cJSON *root) {
 	cJSON* input_params = cJSON_GetObjectItem(root, "inputParams");
 	if (input_params != NULL) {
 		cJSON *greeting_value = cJSON_GetObjectItem(input_params, "greeting_identifier");
@@ -124,6 +125,25 @@ void transfer_data(tuya_mqtt_context_t* context, const tuyalink_message_t* msg, 
 	}
 }
 
+// Sending free available ram in megabytes 
+
+unsigned long mem_avail(){
+	struct sysinfo info;
+	if (sysinfo(&info) < 0){
+		return 0;
+	}
+	const double megabyte = 1024 * 1024;
+
+	return info.freeram / megabyte;
+}
+
+void send_available_memory(tuya_mqtt_context_t *context){
+	unsigned long data = mem_avail();
+
+	char property_string[150];
+	sprintf(property_string, "{\"free_ram\":{\"value\":%lu,\"time\":1631708204231}}", data);
+	tuyalink_thing_property_report_with_ack(context, NULL, property_string);
+}
 
 int main(int argc, char** argv) {
 	char productId[50];     
@@ -147,14 +167,14 @@ int main(int argc, char** argv) {
 	
 	arguments.prodId[0] = '\0';
    	arguments.devId[0] = '\0';
-    	arguments.devSec[0] = '\0';
+    arguments.devSec[0] = '\0';
 	
     	if (argp_parse(&argp, argc, argv, 0, NULL, &arguments) != 0) {
 	    	syslog(LOG_ERR, "ERROR: Failed to parse command-line arguments.");
         	closelog();
 	    	
 	    	exit(EXIT_FAILURE);
-	}
+		}
     	
     	if (arguments.prodId[0] == '\0' || arguments.devId[0] == '\0' || arguments.devSec[0] == '\0') {
         	syslog(LOG_ERR, "ERROR: Insufficient arguments. Expected ARG1 ARG2 ARG3");
@@ -196,6 +216,7 @@ int main(int argc, char** argv) {
 
     	while (g_signal_flag) {
         	tuya_mqtt_loop(client);
+			send_available_memory(client);
     	}
     	
     	cleanup:

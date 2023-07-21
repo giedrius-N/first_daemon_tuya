@@ -1,0 +1,19 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/home/studentas/Desktop/tuyaSDK/tuya-iot-core-sdk/utils",
+                "/home/studentas/Desktop/tuyaSDK/tuya-iot-core-sdk/interface",
+                "/home/studentas/Desktop/tuyaSDK/tuya-iot-core-sdk/include",
+                "./include"
+            ],
+            "defines": [],
+            "cStandard": "c17",
+            "cppStandard": "gnu++14",
+            "intelliSenseMode": "linux-gcc-x64"
+        }
+    ],
+    "version": 4
+}
